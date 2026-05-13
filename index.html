@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이날 만나요 - 일정 조율 프로그램</title>
+    <style>
+        body { font-family: 'Pretendard', 'Malgun Gothic', sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background-color: #f8f9fa; color: #333; line-height: 1.6; }
+        h1 { text-align: center; color: #4A90E2; margin-bottom: 30px; }
+        .screen { display: none; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .active { display: block; }
+        input[type="text"], input[type="password"], input[type="date"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; margin: 8px 0; border: none; border-radius: 8px; background-color: #4A90E2; color: white; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
+        button:hover { background-color: #357ABD; }
+        button.secondary { background-color: #6c757d; }
+        button.success { background-color: #28a745; }
+        button.danger { background-color: #dc3545; }
+        button.small { padding: 6px 10px; font-size: 12px; margin: 2px 0; width: auto; }
+
+        /* 달력 및 셀 스타일 */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; margin-bottom: 20px; width: 100%; }
+        .cal-header { font-weight: bold; font-size: 12px; padding: 5px; background: #eee; border-radius: 5px; }
+        .cal-cell { border: 1px solid #ddd; border-radius: 5px; padding: 5px; min-height: 110px; display: flex; flex-direction: column; background-color: #fff; position: relative; transition: all 0.2s; min-width: 0; overflow: hidden; }
+        .cal-cell.clickable { cursor: pointer; }
+        .cal-cell.clickable:hover { background-color: #f1f8ff; border-color: #4A90E2; }
+        
+        .cal-cell.confirmed-day { 
+            border: 2px solid #2C3E50 !important; 
+            background-color: #2C3E50 !important; 
+            color: white !important; 
+            box-shadow: 0 6px 15px rgba(44, 62, 80, 0.3);
+            transform: translateY(-2px);
+            z-index: 10;
+        }
+
+        .cal-cell.disabled { min-height: 35px !important; height: 35px; background-color: #f1f3f5; color: #adb5bd; justify-content: center; align-items: center; }
+        .cal-cell.empty { border: none; background: transparent; min-height: 35px; }
+
+        .date-num { font-weight: bold; font-size: 14px; }
+        .sun, .holiday { color: red; }
+        .sat { color: blue; }
+        .confirmed-day .date-num, .confirmed-day .sun, .confirmed-day .holiday, .confirmed-day .sat { color: white !important; }
+
+        .stat-pos { color: #4A90E2; font-size: 13px; font-weight: 800; line-height: 1.2; margin-top: 2px; }
+        .stat-imp { color: #dc3545; font-size: 13px; font-weight: 800; line-height: 1.2; }
+        .confirmed-day .stat-pos, .confirmed-day .stat-imp { color: rgba(255,255,255,0.85) !important; }
+
+        .badge-confirmed-large {
+            background: #FFD700;
+            color: #2C3E50;
+            font-size: 10px;
+            font-weight: 900;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 3px;
+            display: inline-block;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .memo-tag { 
+            font-size: 9px; line-height: 1.4; background: #fff9db; padding: 1px 4px; border-radius: 3px; margin-top: 4px; text-align: left; border-left: 2px solid #fab005; 
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; box-sizing: border-box; color: #333;
+        }
+        .confirmed-day .memo-tag { background: rgba(255,255,255,0.15); border-left-color: #FFD700; color: white; }
+
+        /* 투표 버튼 스타일 */
+        .vote-toggle { display: flex; gap: 8px; margin-top: 10px; justify-content: center; padding-top: 5px; }
+        .vote-toggle span { 
+            display: block; width: 35px; height: 35px; line-height: 35px; 
+            font-size: 16px; border: 1px solid #ccc; border-radius: 50%; 
+            background: #f9f9f9; text-align: center; cursor: pointer; color: #333; transition: all 0.2s; 
+        }
+        .vote-toggle input[value="가능"]:checked + span { color: white; background-color: #4A90E2; border-color: #4A90E2; font-weight: bold; }
+        .vote-toggle input[value="불가"]:checked + span { color: white; background-color: #dc3545; border-color: #dc3545; font-weight: bold; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; }
+        .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 15px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 85vh; overflow-y: auto; }
+        .watermark { position: fixed; bottom: 10px; right: 15px; font-size: 11px; color: #e0e0e0; user-select: none; cursor: pointer; }
+
+        .info-box { background: #f1f8ff; border-radius: 10px; padding: 15px; margin-bottom: 20px; border: 1px solid #d0e7ff; }
+    </style>
+</head>
+<body>
+
+    <h1>📅 이날 만나요</h1>
+
+    <div id="screen-home" class="screen active">
+        <button onclick="showScreen('screen-host-menu')">모임 주최자</button>
+        <button onclick="showScreen('screen-participant')" class="secondary">모임 참여자</button>
+    </div>
+
+    <div id="screen-host-menu" class="screen">
+        <h3>👑 모임 주최자 메뉴</h3>
+        <button onclick="showScreen('screen-host-create')">새로운 모임 만들기</button>
+        <button onclick="showScreen('screen-host-login')" class="secondary">기존 모임 관리 (로그인)</button>
+        <button onclick="showScreen('screen-home')" class="secondary" style="background:#aaa;">처음으로</button>
+    </div>
+
+    <div id="screen-host-create" class="screen">
+        <h3>✨ 새로운 모임 생성</h3>
+        <input type="text" id="host-group-name" placeholder="그룹명 (2자 이상)">
+        <input type="password" id="host-password" placeholder="관리자 비밀번호">
+        <input type="text" id="host-meeting-time" placeholder="모임 시간 (예: 오후 7시) - 선택사항">
+        <input type="text" id="host-meeting-place" placeholder="장소 혹은 지도 링크 - 선택사항">
+        <!-- [수정 4] label의 for 속성 추가 (접근성 개선) -->
+        <label for="host-start-date">시작 날짜</label>
+        <input type="date" id="host-start-date">
+        <label for="host-end-date">종료 날짜</label>
+        <input type="date" id="host-end-date">
+        <label style="display:block; margin: 15px 0;" for="host-exclude-holidays">
+            <input type="checkbox" id="host-exclude-holidays"> 주말 및 공휴일 기본 제외
+        </label>
+        <button onclick="previewCalendar()">달력 미리보기</button>
+        <div id="preview-guide" style="display:none; font-size:12px; color:#4A90E2; background:#eef6ff; padding:8px; border-radius:5px; margin-bottom:10px; text-align:center;">
+            💡 달력에서 특정 날짜를 클릭하면 해당 일을 <b>제외</b>할 수 있습니다.
+        </div>
+        <div id="calendar-preview-container"></div>
+        <button onclick="createGroup()" class="success" style="display:none;" id="btn-create-group">모임 생성 완료</button>
+        <button onclick="showScreen('screen-host-menu')" class="secondary">뒤로가기</button>
+    </div>
+
+    <div id="screen-host-login" class="screen">
+        <h3>🔒 주최자 로그인</h3>
+        <input type="text" id="login-group-name" placeholder="그룹명">
+        <input type="password" id="login-password" placeholder="비밀번호">
+        <button onclick="loginHost()">관리 모드 접속</button>
+        <button onclick="showScreen('screen-host-menu')" class="secondary">뒤로가기</button>
+    </div>
+
+    <div id="screen-host-manage" class="screen">
+        <h4 id="manage-group-title" style="color:#4A90E2; text-align:center;"></h4>
+        <div id="host-expiry-notice"></div>
+        <div id="host-group-info" class="info-box" style="display:none;"></div>
+        <div id="host-best-dates" style="background:#eef6ff; padding:15px; border-radius:10px; margin-bottom:20px;"></div>
+        <div id="results-container"></div>
+        <button onclick="showScreen('screen-home')" class="secondary">로그아웃</button>
+    </div>
+
+    <div id="screen-participant" class="screen">
+        <h3>🙋 모임 참여자</h3>
+        <input type="text" id="part-group-name" placeholder="참여할 그룹명">
+        <input type="text" id="part-user-name" placeholder="이름 입력">
+        <button onclick="joinGroup()">날짜 선택하기</button>
+        <button onclick="showScreen('screen-home')" class="secondary">뒤로가기</button>
+    </div>
+
+    <div id="screen-vote" class="screen">
+        <h3 id="vote-title" style="text-align: center; color:#4A90E2;"></h3>
+        <div id="participant-group-info" class="info-box" style="display:none; font-size:14px;"></div>
+        <div id="vote-calendar-container"></div>
+        <button onclick="submitVote()" class="success">선택 완료 및 결과 보기</button>
+        <button onclick="showScreen('screen-home')" class="secondary">취소</button>
+    </div>
+
+    <div id="screen-results" class="screen">
+        <h3>✅ 현재 참여 현황</h3>
+        <div id="result-expiry-notice"></div>
+        <div id="result-group-info" class="info-box" style="display:none; font-size:14px;"></div>
+        <div id="result-best-dates" style="background:#eef6ff; padding:15px; border-radius:10px; margin-bottom:20px;"></div>
+        <div id="participant-results-container"></div>
+        <button onclick="showScreen('screen-home')">처음으로</button>
+    </div>
+
+    <div id="detail-modal" class="modal-overlay" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div id="modal-date-title" style="font-size:18px; font-weight:bold; color:#4A90E2;"></div>
+            <div id="modal-body" style="margin-top:15px;">
+                <h5 style="color:#4A90E2;">⭕ 참석 가능 (<span id="modal-pos-count">0</span>명)</h5>
+                <div id="modal-pos-list"></div>
+                <h5 style="color:#dc3545;">❌ 참석 불가 (<span id="modal-imp-count">0</span>명)</h5>
+                <div id="modal-imp-list"></div>
+                <h5 style="color:#fab005;">📝 메모</h5>
+                <div id="modal-memo-list"></div>
+            </div>
+            <button onclick="closeModal()" class="secondary">닫기</button>
+        </div>
+    </div>
+
+    <!-- 총괄 관리자 비밀번호 모달 -->
+    <div id="super-admin-modal" class="modal-overlay" onclick="closeSuperModal()">
+        <div class="modal-content" onclick="event.stopPropagation()" style="max-width:340px;">
+            <div style="font-size:18px; font-weight:bold; color:#2C3E50; margin-bottom:15px; text-align:center;">🔐 총괄 관리자</div>
+            <input type="password" id="super-admin-password" placeholder="총괄 관리자 비밀번호" style="margin-bottom:10px;">
+            <button onclick="loginSuperAdmin()" style="background:#2C3E50;">접속</button>
+            <button onclick="closeSuperModal()" class="secondary">취소</button>
+        </div>
+    </div>
+
+    <!-- 총괄 관리자 화면 -->
+    <div id="screen-super-admin" class="screen">
+        <h3 style="color:#2C3E50; text-align:center;">🛡️ 총괄 관리자 모드</h3>
+        <div id="super-admin-group-list" style="margin-bottom:20px;"></div>
+        <button onclick="showScreen('screen-home')" class="secondary">로그아웃</button>
+    </div>
+
+    <div class="watermark" id="secret-btn">2026 최창훈</div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA4xsKgsO19oJLmf6BvBwHZCHfWiGcY7S8",
+            authDomain: "meeting-day-c7d96.firebaseapp.com",
+            projectId: "meeting-day-c7d96",
+            storageBucket: "meeting-day-c7d96.firebasestorage.app",
+            messagingSenderId: "677974995931",
+            appId: "1:677974995931:web:736f44261f8b600f4e6dfe"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let currentGroup = "";
+        let currentUser = "";
+        let validDates = []; 
+        let manualExcludedDates = [];
+        let isHostMode = false;
+        let aggregateData = {};
+
+        // ── 이스터에그: 워터마크 5번 클릭 시 총괄 관리자 모달 표시 ──
+        const SUPER_ADMIN_PASSWORD = "choi2026master"; // 총괄 관리자 비밀번호
+        let secretClickCount = 0;
+        let secretClickTimer = null;
+
+        document.getElementById('secret-btn').addEventListener('click', () => {
+            secretClickCount++;
+            clearTimeout(secretClickTimer);
+            secretClickTimer = setTimeout(() => { secretClickCount = 0; }, 2000); // 2초 내 5번
+            if (secretClickCount >= 5) {
+                secretClickCount = 0;
+                clearTimeout(secretClickTimer);
+                document.getElementById('super-admin-password').value = '';
+                document.getElementById('super-admin-modal').style.display = 'flex';
+            }
+        });
+
+        window.closeSuperModal = () => {
+            document.getElementById('super-admin-modal').style.display = 'none';
+        };
+
+        window.loginSuperAdmin = () => {
+            const pwd = document.getElementById('super-admin-password').value;
+            if (pwd === SUPER_ADMIN_PASSWORD) {
+                closeSuperModal();
+                loadSuperAdminGroups();
+                document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+                document.getElementById('screen-super-admin').classList.add('active');
+                window.scrollTo(0, 0);
+            } else {
+                alert("비밀번호가 올바르지 않습니다.");
+            }
+        };
+
+        // 만료 여부 판별 헬퍼
+        function getExpiryInfo(d) {
+            const now = new Date();
+            const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+            // 조건 1: 모임일 확정 후 7일 경과
+            if (d.confirmedDate) {
+                const confirmed = new Date(d.confirmedDate);
+                const daysSince = Math.floor((now - confirmed) / MS_PER_DAY);
+                if (daysSince >= 7) {
+                    return { expired: true, reason: `모임일 확정(${d.confirmedDate}) 후 ${daysSince}일 경과 (7일 초과)` };
+                }
+                if (daysSince >= 0) {
+                    const remaining = 7 - daysSince;
+                    return { expired: false, warning: true, reason: `모임일 확정 후 ${daysSince}일째 — ${remaining}일 후 삭제 대상` };
+                }
+            }
+
+            // 조건 2: 그룹 생성 후 20일 경과
+            if (d.createdAt) {
+                const created = new Date(d.createdAt);
+                const daysSince = Math.floor((now - created) / MS_PER_DAY);
+                if (daysSince >= 20) {
+                    return { expired: true, reason: `그룹 생성 후 ${daysSince}일 경과 (20일 초과)` };
+                }
+                if (daysSince >= 17) {
+                    const remaining = 20 - daysSince;
+                    return { expired: false, warning: true, reason: `그룹 생성 후 ${daysSince}일째 — ${remaining}일 후 삭제 대상` };
+                }
+            }
+
+            return { expired: false, warning: false };
+        }
+
+        async function loadSuperAdminGroups() {
+            const container = document.getElementById('super-admin-group-list');
+            container.innerHTML = '<div style="text-align:center; color:#999;">그룹 목록 불러오는 중...</div>';
+            try {
+                const snap = await getDocs(collection(db, "groups"));
+                if (snap.empty) {
+                    container.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">등록된 그룹이 없습니다.</div>';
+                    return;
+                }
+
+                const groups = [];
+                snap.forEach(s => groups.push({ id: s.id, data: s.data() }));
+
+                const expired  = groups.filter(g => getExpiryInfo(g.data).expired);
+                const warning  = groups.filter(g => { const i = getExpiryInfo(g.data); return !i.expired && i.warning; });
+                const normal   = groups.filter(g => { const i = getExpiryInfo(g.data); return !i.expired && !i.warning; });
+
+                const renderCard = (gName, d, expiry) => {
+                    const borderColor = expiry.expired ? '#dc3545' : expiry.warning ? '#fd7e14' : '#dee2e6';
+                    const bgColor     = expiry.expired ? '#fff5f5' : expiry.warning ? '#fff8f0' : '#f8f9fa';
+                    const badge       = expiry.expired
+                        ? `<span style="background:#dc3545;color:white;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:bold;">🗑️ 삭제 대상</span>`
+                        : expiry.warning
+                        ? `<span style="background:#fd7e14;color:white;font-size:11px;padding:2px 7px;border-radius:10px;font-weight:bold;">⚠️ 만료 임박</span>`
+                        : '';
+                    const reasonHtml  = (expiry.expired || expiry.warning)
+                        ? `<div style="font-size:11px;margin-top:5px;color:${expiry.expired?'#dc3545':'#fd7e14'};font-weight:bold;">📋 ${expiry.reason}</div>`
+                        : '';
+                    return `
+                        <div style="background:${bgColor}; border:1.5px solid ${borderColor}; border-radius:10px; padding:14px; margin-bottom:10px;">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                                <span style="font-weight:bold; font-size:15px; color:#2C3E50;">📌 ${gName}</span>
+                                ${badge}
+                            </div>
+                            <div style="font-size:12px; color:#666; line-height:1.8;">
+                                📅 기간: ${d.startDate || '-'} ~ ${d.endDate || '-'}<br>
+                                ${d.meetingTime  ? `⏰ 시간: ${d.meetingTime}<br>`  : ''}
+                                ${d.meetingPlace ? `📍 장소: ${d.meetingPlace}<br>` : ''}
+                                ${d.confirmedDate ? `<span style="color:#28a745;font-weight:bold;">✅ 확정일: ${d.confirmedDate}</span><br>` : ''}
+                                🕒 생성: ${d.createdAt ? new Date(d.createdAt).toLocaleString('ko-KR') : '-'}
+                            </div>
+                            ${reasonHtml}
+                            <button onclick="superDeleteGroup('${gName}')" class="danger small" style="margin-top:10px; width:100%; padding:8px;">🗑️ 이 그룹 삭제</button>
+                        </div>`;
+                };
+
+                let html = `<div style="font-size:13px; color:#666; margin-bottom:16px;">
+                    총 <b>${groups.length}</b>개 그룹
+                    &nbsp;|&nbsp; <span style="color:#dc3545; font-weight:bold;">삭제 대상 ${expired.length}개</span>
+                    &nbsp;|&nbsp; <span style="color:#fd7e14; font-weight:bold;">만료 임박 ${warning.length}개</span>
+                </div>`;
+
+                // 삭제 대상 일괄 삭제 버튼
+                if (expired.length > 0) {
+                    html += `
+                        <div style="background:#fff5f5; border:1.5px solid #dc3545; border-radius:10px; padding:14px; margin-bottom:20px;">
+                            <div style="font-weight:bold; color:#dc3545; margin-bottom:8px;">🗑️ 삭제 대상 그룹 일괄 삭제</div>
+                            <div style="font-size:12px; color:#666; margin-bottom:10px;">
+                                아래 <b>${expired.length}개</b> 그룹이 삭제 조건을 충족했습니다.<br>
+                                • 모임일 확정 후 7일 초과<br>
+                                • 그룹 생성 후 20일 초과
+                            </div>
+                            <button onclick="superDeleteAllExpired()" class="danger" style="padding:10px;">🗑️ 삭제 대상 ${expired.length}개 일괄 삭제</button>
+                        </div>`;
+                }
+
+                if (expired.length > 0) {
+                    html += `<div style="font-size:13px; font-weight:bold; color:#dc3545; margin-bottom:8px;">🗑️ 삭제 대상 (${expired.length}개)</div>`;
+                    expired.forEach(g => { html += renderCard(g.id, g.data, getExpiryInfo(g.data)); });
+                }
+                if (warning.length > 0) {
+                    html += `<div style="font-size:13px; font-weight:bold; color:#fd7e14; margin:16px 0 8px;">⚠️ 만료 임박 (${warning.length}개)</div>`;
+                    warning.forEach(g => { html += renderCard(g.id, g.data, getExpiryInfo(g.data)); });
+                }
+                if (normal.length > 0) {
+                    html += `<div style="font-size:13px; font-weight:bold; color:#495057; margin:16px 0 8px;">✅ 정상 운영 중 (${normal.length}개)</div>`;
+                    normal.forEach(g => { html += renderCard(g.id, g.data, getExpiryInfo(g.data)); });
+                }
+
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = `<div style="color:red;">불러오기 실패: ${err.message}</div>`;
+            }
+        }
+
+        // 개별 삭제
+        window.superDeleteGroup = async (gName) => {
+            if (!confirm(`"${gName}" 그룹을 완전히 삭제하시겠습니까?\n참여자 응답 데이터도 모두 삭제됩니다.`)) return;
+            try {
+                const responsesSnap = await getDocs(collection(db, "groups", gName, "responses"));
+                const batch = writeBatch(db);
+                responsesSnap.forEach(r => batch.delete(r.ref));
+                await batch.commit();
+                await deleteDoc(doc(db, "groups", gName));
+                alert(`"${gName}" 그룹이 삭제되었습니다.`);
+                loadSuperAdminGroups();
+            } catch (err) {
+                alert("삭제 실패: " + err.message);
+            }
+        };
+
+        // 삭제 대상 일괄 삭제
+        window.superDeleteAllExpired = async () => {
+            const snap = await getDocs(collection(db, "groups"));
+            const targets = [];
+            snap.forEach(s => { if (getExpiryInfo(s.data()).expired) targets.push(s.id); });
+            if (targets.length === 0) return alert("삭제 대상 그룹이 없습니다.");
+            if (!confirm(`삭제 대상 그룹 ${targets.length}개를 모두 삭제하시겠습니까?\n\n대상: ${targets.join(', ')}`)) return;
+            try {
+                for (const gName of targets) {
+                    const responsesSnap = await getDocs(collection(db, "groups", gName, "responses"));
+                    const batch = writeBatch(db);
+                    responsesSnap.forEach(r => batch.delete(r.ref));
+                    await batch.commit();
+                    await deleteDoc(doc(db, "groups", gName));
+                }
+                alert(`${targets.length}개 그룹이 삭제되었습니다.`);
+                loadSuperAdminGroups();
+            } catch (err) {
+                alert("일괄 삭제 중 오류: " + err.message);
+            }
+        };
+
+        const HOLIDAYS_2026 = {
+            "2026-01-01": "신정", "2026-02-16": "설연휴", "2026-02-17": "설날", "2026-02-18": "설연휴",
+            "2026-03-01": "삼일절", "2026-03-02": "대체휴일", "2026-05-05": "어린이날", "2026-05-24": "석가탄신일",
+            "2026-05-25": "대체휴일", "2026-06-06": "현충일", "2026-08-15": "광복절", "2026-08-17": "대체휴일",
+            "2026-09-24": "추석연휴", "2026-09-25": "추석", "2026-09-26": "추석연휴", "2026-09-28": "대체휴일",
+            "2026-10-03": "개천절", "2026-10-05": "대체휴일", "2026-10-09": "한글날", "2026-12-25": "성탄절"
+        };
+
+        window.showScreen = (screenId) => {
+            if(screenId === 'screen-home') {
+                isHostMode = false;
+                currentGroup = "";
+                currentUser = "";
+                manualExcludedDates = [];
+            }
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+            window.scrollTo(0,0);
+        };
+
+        window.closeModal = () => document.getElementById('detail-modal').style.display = 'none';
+
+        window.toggleManualExclude = (ds) => {
+            if (manualExcludedDates.includes(ds)) {
+                manualExcludedDates = manualExcludedDates.filter(d => d !== ds);
+            } else {
+                manualExcludedDates.push(ds);
+            }
+            previewCalendar();
+        };
+
+        function generateCalendarHTML(s, e, ex, mode, agg, conf, manualEx = []) {
+            let html = ""; 
+            const [sY, sM, sD] = s.split('-');
+            const [eY, eM, eD] = e.split('-');
+            // [수정 1] 날짜 비교를 문자열 대신 Date 객체로 수행 (연도 경계 오류 방지)
+            const start = new Date(Number(sY), Number(sM) - 1, Number(sD));
+            const end   = new Date(Number(eY), Number(eM) - 1, Number(eD));
+            
+            if(mode !== 'result') validDates = [];
+            
+            let cur = new Date(start.getFullYear(), start.getMonth(), 1);
+            
+            while (cur <= new Date(end.getFullYear(), end.getMonth(), 1)) {
+                const y = cur.getFullYear(); const m = cur.getMonth();
+                html += `<div style="text-align:center;font-weight:bold;margin:25px 0 10px; color:#4A90E2;">${y}년 ${m+1}월</div><div class="calendar-grid">`;
+                ['일','월','화','수','목','금','토'].forEach((d, i) => html += `<div class="cal-header" style="${i===0?'color:red':(i===6?'color:blue':'')}">${d}</div>`);
+                const f = new Date(y, m, 1).getDay(); const days = new Date(y, m+1, 0).getDate();
+                
+                for(let i=0; i<f; i++) html += `<div class="cal-cell empty"></div>`;
+                
+                for(let d=1; d<=days; d++) {
+                    const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    const dt = new Date(y, m, d);
+                    const isHoliday = !!HOLIDAYS_2026[ds];
+                    // [수정 1] 날짜 범위 비교를 Date 객체로 통일
+                    const isOut = dt < start || dt > end || (ex && (dt.getDay()===0 || dt.getDay()===6 || isHoliday)) || manualEx.includes(ds);
+                    
+                    if (isOut) {
+                        const previewClick = mode === 'preview' ? `onclick="toggleManualExclude('${ds}')" style="cursor:pointer;"` : "";
+                        html += `<div class="cal-cell disabled" ${previewClick}>${d}</div>`;
+                    } else {
+                        if(mode !== 'result') validDates.push(ds); 
+                        const isC = conf === ds;
+                        const hasData = agg && agg[ds];
+                        
+                        let clickAttr = "";
+                        if(mode === 'result' && hasData) clickAttr = `onclick="openModal('${ds}')" class="cal-cell clickable ${isC?'confirmed-day':''}"`;
+                        else if(mode === 'preview') clickAttr = `onclick="toggleManualExclude('${ds}')" class="cal-cell clickable"`;
+                        else clickAttr = `class="cal-cell ${isC?'confirmed-day':''}"`;
+                        
+                        let dCls = "date-num";
+                        if(dt.getDay() === 0 || isHoliday) dCls += " sun";
+                        else if(dt.getDay() === 6) dCls += " sat";
+
+                        html += `<div ${clickAttr}><span class="${dCls}">${d}</span>`;
+                        if(isHoliday) html += `<div style="font-size:8px; ${isC?'color:white':'color:red'}; margin-bottom:2px;">${HOLIDAYS_2026[ds]}</div>`;
+                        if(isC) html += `<div class="badge-confirmed-large">👑 확정</div>`;
+                        
+                        if(hasData) {
+                            if(agg[ds].pos.length > 0) html += `<div class="stat-pos">O ${agg[ds].pos.length}</div>`;
+                            if(agg[ds].imp.length > 0) html += `<div class="stat-imp">X ${agg[ds].imp.length}</div>`;
+                            agg[ds].memos.slice(0, 2).forEach(memo => {
+                                html += `<div class="memo-tag" style="background:#eee; border-left-color:#bbb;">${memo.name}: ${memo.text}</div>`;
+                            });
+                        }
+
+                        if(isHostMode && mode === 'result') {
+                            html += isC
+                                ? `<button onclick="event.stopPropagation(); cancelConfirm()" class="small" style="background:white; color:#2C3E50; border:1px solid #2C3E50; margin-top:5px;">취소</button>`
+                                : `<button onclick="event.stopPropagation(); confirmDate('${ds}')" class="small success" style="margin-top:5px;">확정</button>`;
+                        }
+                        
+                        if(mode === 'vote') {
+                            html += `
+                                <div class="vote-toggle">
+                                    <label>
+                                        <input type="radio" name="status_${ds}" value="가능" checked style="display:none;">
+                                        <span onclick="this.previousElementSibling.checked=true">O</span>
+                                    </label>
+                                    <label>
+                                        <input type="radio" name="status_${ds}" value="불가" style="display:none;">
+                                        <span onclick="this.previousElementSibling.checked=true">X</span>
+                                    </label>
+                                </div>
+                                <input type="text" name="memo_${ds}" placeholder="내 메모"
+                                    style="font-size:10px; padding:4px; margin:2px 0; border:1px solid #4A90E2; border-radius:4px;">`;
+                        }
+                        html += `</div>`;
+                    }
+                }
+                html += `</div>`; cur.setMonth(cur.getMonth()+1);
+            }
+            return html;
+        }
+
+        // [수정 2] forEach 콜백 파라미터명을 'snap'으로 변경하여 import한 doc() 함수와의 충돌 해소
+        function parseVotes(qs) {
+            const agg = {};
+            qs.forEach(snap => {
+                const u = snap.id;
+                const v = snap.data();
+                for (const d in v) {
+                    if (!agg[d]) agg[d] = { pos: [], imp: [], memos: [] };
+                    if(v[d].status === '가능') agg[d].pos.push(u);
+                    else agg[d].imp.push(u);
+                    if(v[d].memo) agg[d].memos.push({ name: u, text: v[d].memo });
+                }
+            });
+            return agg;
+        }
+
+        function displayGroupInfo(data, elementId) {
+            const el = document.getElementById(elementId);
+            if(data.meetingTime || data.meetingPlace) {
+                let infoHtml = "";
+                if(data.meetingTime) infoHtml += `⏰ <b>시간:</b> ${data.meetingTime}<br>`;
+                if(data.meetingPlace) {
+                    const isUrl = data.meetingPlace.startsWith('http');
+                    infoHtml += `📍 <b>장소:</b> ${isUrl ? `<a href="${data.meetingPlace}" target="_blank">지도 보기</a>` : data.meetingPlace}`;
+                }
+                el.innerHTML = infoHtml; el.style.display = "block";
+            } else { el.style.display = "none"; }
+        }
+
+        window.joinGroup = async () => {
+            const gName = document.getElementById('part-group-name').value.trim();
+            const uName = document.getElementById('part-user-name').value.trim();
+            if(!gName || !uName) return alert("정보를 입력하세요.");
+            
+            const docSnap = await getDoc(doc(db, "groups", gName));
+            if (docSnap.exists()) {
+                currentGroup = gName; currentUser = uName;
+                const data = docSnap.data();
+                if(data.confirmedDate) { await loadResults('participant-results-container'); showScreen('screen-results'); return; }
+                
+                const qSnap = await getDocs(collection(db, "groups", gName, "responses"));
+                displayGroupInfo(data, 'participant-group-info');
+                
+                // [수정 3] validDates를 명시적으로 초기화한 뒤 달력 생성 (중복 추가 방지)
+                validDates = [];
+                const voteHtml = generateCalendarHTML(data.startDate, data.endDate, data.excludeHolidays, 'vote', parseVotes(qSnap), null, data.manualExcludedDates || []);
+                document.getElementById('vote-calendar-container').innerHTML = voteHtml;
+                document.getElementById('vote-title').innerText = `${uName}님의 날짜 선택`;
+                showScreen('screen-vote');
+            } else alert("모임을 찾을 수 없습니다.");
+        };
+
+        window.submitVote = async () => {
+            if(!currentGroup || !currentUser) return alert("세션 정보가 없습니다. 다시 시도해 주세요.");
+            
+            try {
+                const v = {};
+                if(validDates.length === 0) return alert("선택할 수 있는 날짜가 없습니다.");
+                
+                validDates.forEach(d => { 
+                    const statusEl = document.querySelector(`input[name="status_${d}"]:checked`);
+                    const memoEl = document.querySelector(`input[name="memo_${d}"]`);
+                    v[d] = { 
+                        status: statusEl ? statusEl.value : "가능", 
+                        memo: memoEl ? memoEl.value.trim() : "" 
+                    }; 
+                });
+
+                await setDoc(doc(db, "groups", currentGroup, "responses", currentUser), v);
+                alert("선택이 저장되었습니다!");
+                
+                await loadResults('participant-results-container');
+                showScreen('screen-results');
+            } catch (err) {
+                console.error(err);
+                alert("저장 중 오류가 발생했습니다: " + err.message);
+            }
+        };
+
+        // 만료 안내 배너 HTML 생성 (주최자/참여자 공통)
+        function getExpiryBannerHTML(data) {
+            const MS_PER_DAY = 1000 * 60 * 60 * 24;
+            const now = new Date();
+
+            if (data.confirmedDate) {
+                const confirmed = new Date(data.confirmedDate);
+                const daysSince = Math.floor((now - confirmed) / MS_PER_DAY);
+                const remaining = 7 - daysSince;
+                if (remaining <= 0) {
+                    return `<div style="background:#fff5f5; border:1.5px solid #dc3545; border-radius:10px; padding:12px; margin-bottom:15px; font-size:13px; color:#dc3545; font-weight:bold;">
+                        🗑️ 이 그룹은 모임일 확정 후 7일이 지나 <u>삭제 대상</u>입니다.
+                    </div>`;
+                } else if (remaining <= 3) {
+                    return `<div style="background:#fff8f0; border:1.5px solid #fd7e14; border-radius:10px; padding:12px; margin-bottom:15px; font-size:13px; color:#fd7e14; font-weight:bold;">
+                        ⚠️ 모임일 확정 후 ${daysSince}일이 지났습니다. <b>${remaining}일 후</b> 이 그룹은 삭제 대상이 됩니다.
+                    </div>`;
+                }
+            }
+
+            if (data.createdAt) {
+                const created = new Date(data.createdAt);
+                const daysSince = Math.floor((now - created) / MS_PER_DAY);
+                const remaining = 20 - daysSince;
+                if (remaining <= 0) {
+                    return `<div style="background:#fff5f5; border:1.5px solid #dc3545; border-radius:10px; padding:12px; margin-bottom:15px; font-size:13px; color:#dc3545; font-weight:bold;">
+                        🗑️ 이 그룹은 생성 후 20일이 지나 <u>삭제 대상</u>입니다.
+                    </div>`;
+                } else if (remaining <= 3) {
+                    return `<div style="background:#fff8f0; border:1.5px solid #fd7e14; border-radius:10px; padding:12px; margin-bottom:15px; font-size:13px; color:#fd7e14; font-weight:bold;">
+                        ⚠️ 그룹 생성 후 ${daysSince}일이 지났습니다. <b>${remaining}일 후</b> 이 그룹은 삭제 대상이 됩니다.
+                    </div>`;
+                }
+            }
+
+            return "";
+        }
+
+        window.loadResults = async (cid) => {
+            const groupSnap = await getDoc(doc(db, "groups", currentGroup));
+            const data = groupSnap.data();
+            const qSnap = await getDocs(collection(db, "groups", currentGroup, "responses"));
+            aggregateData = parseVotes(qSnap);
+            renderBestDates(aggregateData, isHostMode ? 'host-best-dates' : 'result-best-dates');
+            
+            const infoId = cid.includes('participant') ? 'result-group-info' : 'host-group-info';
+            displayGroupInfo(data, infoId);
+
+            // 만료 안내 배너 삽입
+            const bannerEl = document.getElementById(cid.includes('participant') ? 'result-expiry-notice' : 'host-expiry-notice');
+            if (bannerEl) bannerEl.innerHTML = getExpiryBannerHTML(data);
+            
+            document.getElementById(cid).innerHTML = generateCalendarHTML(data.startDate, data.endDate, data.excludeHolidays, 'result', aggregateData, data.confirmedDate, data.manualExcludedDates || []);
+        };
+
+        window.createGroup = async () => {
+            const gName = document.getElementById('host-group-name').value.trim();
+            const pwd = document.getElementById('host-password').value;
+            const s = document.getElementById('host-start-date').value;
+            const e = document.getElementById('host-end-date').value;
+
+            // [수정 5] 필수 항목 누락 시 구체적인 안내 메시지 표시
+            if(!gName) return alert("그룹명을 입력해 주세요.");
+            if(gName.length < 2) return alert("그룹명은 2자 이상이어야 합니다.");
+            if(!pwd) return alert("관리자 비밀번호를 입력해 주세요.");
+            if(!s || !e) return alert("시작 날짜와 종료 날짜를 모두 선택해 주세요.");
+
+            // [수정 2] 날짜 유효성 검사: 시작 날짜가 종료 날짜보다 늦은 경우 차단
+            if(s > e) return alert("시작 날짜가 종료 날짜보다 늦을 수 없습니다.");
+            
+            await setDoc(doc(db, "groups", gName), { 
+                password: pwd, startDate: s, endDate: e, 
+                meetingTime: document.getElementById('host-meeting-time').value.trim(),
+                meetingPlace: document.getElementById('host-meeting-place').value.trim(),
+                excludeHolidays: document.getElementById('host-exclude-holidays').checked, 
+                manualExcludedDates: manualExcludedDates,
+                confirmedDate: null, createdAt: new Date().toISOString() 
+            });
+            alert("생성 완료!\n\n※ 그룹은 생성 후 20일이 지나면 삭제 대상으로 분류됩니다."); showScreen('screen-home');
+        };
+
+        window.loginHost = async () => {
+            const gName = document.getElementById('login-group-name').value.trim();
+            const pwd = document.getElementById('login-password').value;
+            const docSnap = await getDoc(doc(db, "groups", gName));
+            if (docSnap.exists() && docSnap.data().password === pwd) {
+                currentGroup = gName; isHostMode = true;
+                document.getElementById('manage-group-title').innerText = `[ ${gName} ] 관리 모드`;
+                await loadResults('results-container');
+                showScreen('screen-host-manage');
+            } else alert("비밀번호 불일치");
+        };
+
+        window.previewCalendar = () => {
+            const s = document.getElementById('host-start-date').value;
+            const e = document.getElementById('host-end-date').value;
+            if(!s || !e) return alert("날짜를 선택해 주세요.");
+            // [수정 2] 날짜 유효성 검사: 시작 날짜가 종료 날짜보다 늦은 경우 차단
+            if(s > e) return alert("시작 날짜가 종료 날짜보다 늦을 수 없습니다.");
+            document.getElementById('preview-guide').style.display = 'block';
+            document.getElementById('calendar-preview-container').innerHTML = generateCalendarHTML(s, e, document.getElementById('host-exclude-holidays').checked, 'preview', null, null, manualExcludedDates);
+            document.getElementById('btn-create-group').style.display = 'block';
+        };
+
+        function renderBestDates(agg, id) {
+            const e = Object.entries(agg).map(([d,v])=>({d,c:v.pos.length})).filter(x=>x.c>0).sort((a,b)=>b.c-a.c);
+            document.getElementById(id).innerHTML = e.length ? "💡 <strong>추천 날짜:</strong> " + e.slice(0,3).map(x=>`<span style="color:#4A90E2;font-weight:bold;">${x.d}</span>(${x.c}명)`).join(', ') : "💡 데이터 없음";
+        }
+        
+        window.openModal = (dateStr) => {
+            const data = aggregateData[dateStr];
+            if (!data) return;
+            document.getElementById('modal-date-title').innerText = `${dateStr} ${HOLIDAYS_2026[dateStr] ? '(' + HOLIDAYS_2026[dateStr] + ')' : ''}`;
+            document.getElementById('modal-pos-count').innerText = data.pos.length;
+            document.getElementById('modal-imp-count').innerText = data.imp.length;
+            document.getElementById('modal-pos-list').innerText = data.pos.join(', ') || '없음';
+            document.getElementById('modal-imp-list').innerText = data.imp.join(', ') || '없음';
+            document.getElementById('modal-memo-list').innerHTML = data.memos.length 
+                ? data.memos.map(m => `<div style="padding:4px 0; border-bottom:1px solid #eee;"><strong>${m.name}:</strong> ${m.text}</div>`).join('') 
+                : '<div style="color:#ccc; text-align:center;">메모 없음</div>';
+            document.getElementById('detail-modal').style.display = 'flex';
+        };
+
+        window.confirmDate = async (d) => {
+            if(confirm(`${d}로 확정하시겠습니까?\n\n※ 모임일 확정 후 7일이 지나면 이 그룹은 삭제 대상으로 분류됩니다.`)) {
+                await updateDoc(doc(db, "groups", currentGroup), { confirmedDate: d });
+                loadResults('results-container');
+            }
+        };
+
+        window.cancelConfirm = async () => {
+            if(confirm("확정을 취소하시겠습니까?")) {
+                await updateDoc(doc(db, "groups", currentGroup), { confirmedDate: null });
+                loadResults('results-container');
+            }
+        };
+    </script>
+</body>
+</html>
