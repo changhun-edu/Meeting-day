@@ -98,10 +98,11 @@
 
     <div id="screen-host-create" class="screen">
         <h3>✨ 새로운 모임 생성</h3>
+        <div id="create-limit-notice" style="font-size:12px; color:#6c757d; background:#f8f9fa; border-radius:8px; padding:8px 12px; margin-bottom:4px; text-align:center;"></div>
         <input type="text" id="host-group-name" placeholder="그룹명 (2자 이상)">
         <input type="password" id="host-password" placeholder="관리자 비밀번호">
-        <input type="text" id="host-meeting-time" placeholder="모임 시간 (예: 오후 7시) - 선택사항">
-        <input type="text" id="host-meeting-place" placeholder="장소 혹은 지도 링크 - 선택사항">
+        <input type="text" id="host-meeting-time" placeholder="모임 시간 (예: 오후 7시)">
+        <input type="text" id="host-meeting-place" placeholder="장소 혹은 지도 링크">
         <!-- [수정 4] label의 for 속성 추가 (접근성 개선) -->
         <label for="host-start-date">시작 날짜</label>
         <input type="date" id="host-start-date">
@@ -117,6 +118,51 @@
         <div id="calendar-preview-container"></div>
         <button onclick="createGroup()" class="success" style="display:none;" id="btn-create-group">모임 생성 완료</button>
         <button onclick="showScreen('screen-host-menu')" class="secondary">뒤로가기</button>
+    </div>
+
+    <!-- 그룹 생성 완료 & 공유 화면 -->
+    <div id="screen-share" class="screen">
+        <div style="text-align:center; font-size:40px; margin-bottom:10px;">🎉</div>
+        <h3 style="text-align:center; color:#28a745;">모임이 생성되었습니다!</h3>
+        <div class="info-box" style="margin-bottom:20px;">
+            <div style="font-size:13px; color:#666; margin-bottom:6px;">그룹명</div>
+            <div id="share-group-name" style="font-size:18px; font-weight:bold; color:#2C3E50;"></div>
+        </div>
+
+        <div style="font-size:14px; font-weight:bold; color:#333; margin-bottom:8px;">📢 참여자에게 보낼 메시지</div>
+        <div style="position:relative; margin-bottom:10px;">
+            <textarea id="share-message-text" readonly
+                style="width:100%; min-height:160px; padding:14px; border:1.5px solid #4A90E2; border-radius:10px;
+                       font-size:14px; line-height:1.7; background:#f8fbff; color:#333;
+                       box-sizing:border-box; resize:none; font-family:inherit;"></textarea>
+        </div>
+
+        <button onclick="copyShareMessage()" id="btn-copy" class="success">📋 메시지 복사하기</button>
+
+        <div style="background:#fff8f0; border:1px solid #ffd8a8; border-radius:8px; padding:10px; margin-top:12px; font-size:12px; color:#666;">
+            ※ 그룹은 생성 후 <b>20일</b>이 지나면 삭제 대상으로 분류됩니다.
+        </div>
+        <button onclick="showScreen('screen-home')" class="secondary" style="margin-top:12px;">처음으로</button>
+    </div>
+
+    <!-- 날짜 확정 알림 메시지 화면 -->
+    <div id="screen-confirm-share" class="screen">
+        <div style="text-align:center; font-size:40px; margin-bottom:10px;">🎊</div>
+        <h3 style="text-align:center; color:#28a745;">모임 날짜가 확정되었습니다!</h3>
+        <div class="info-box" style="margin-bottom:20px;">
+            <div style="font-size:13px; color:#666; margin-bottom:4px;">확정된 모임</div>
+            <div id="confirm-share-group-name" style="font-size:17px; font-weight:bold; color:#2C3E50;"></div>
+            <div id="confirm-share-date" style="font-size:22px; font-weight:bold; color:#4A90E2; margin-top:4px;"></div>
+        </div>
+
+        <div style="font-size:14px; font-weight:bold; color:#333; margin-bottom:8px;">📢 참여자에게 보낼 확정 메시지</div>
+        <textarea id="confirm-share-message-text" readonly
+            style="width:100%; min-height:180px; padding:14px; border:1.5px solid #28a745; border-radius:10px;
+                   font-size:14px; line-height:1.7; background:#f6fff8; color:#333;
+                   box-sizing:border-box; resize:none; font-family:inherit; margin-bottom:10px;"></textarea>
+
+        <button onclick="copyConfirmMessage()" id="btn-confirm-copy" class="success">📋 확정 메시지 복사하기</button>
+        <button onclick="showScreen('screen-host-manage')" class="secondary" style="margin-top:4px;">관리 화면으로 돌아가기</button>
     </div>
 
     <div id="screen-host-login" class="screen">
@@ -196,8 +242,9 @@
     <div class="watermark" id="secret-btn">2026 최창훈</div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { initializeApp }   from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, getDocs, deleteDoc, writeBatch }
+            from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyA4xsKgsO19oJLmf6BvBwHZCHfWiGcY7S8",
@@ -264,7 +311,7 @@
                 if (daysSince >= 7) {
                     return { expired: true, reason: `모임일 확정(${d.confirmedDate}) 후 ${daysSince}일 경과 (7일 초과)` };
                 }
-                if (daysSince >= 0) {
+                if (daysSince >= 4) {
                     const remaining = 7 - daysSince;
                     return { expired: false, warning: true, reason: `모임일 확정 후 ${daysSince}일째 — ${remaining}일 후 삭제 대상` };
                 }
@@ -424,6 +471,36 @@
                 currentUser = "";
                 manualExcludedDates = [];
             }
+            // 모임 생성 화면 진입 시 오늘 날짜를 시작·종료 날짜의 최솟값으로 설정 + 입력값 초기화
+            if(screenId === 'screen-host-create') {
+                const today = new Date().toISOString().split('T')[0];
+                document.getElementById('host-start-date').min = today;
+                document.getElementById('host-start-date').value = '';
+                document.getElementById('host-end-date').min = today;
+                document.getElementById('host-end-date').value = '';
+                document.getElementById('host-group-name').value = '';
+                document.getElementById('host-password').value = '';
+                document.getElementById('host-meeting-time').value = '';
+                document.getElementById('host-meeting-place').value = '';
+                document.getElementById('host-exclude-holidays').checked = false;
+                document.getElementById('preview-guide').style.display = 'none';
+                document.getElementById('calendar-preview-container').innerHTML = '';
+                document.getElementById('btn-create-group').style.display = 'none';
+                manualExcludedDates = [];
+                // 생성 제한 안내
+                const { count, allowed } = checkDailyLimit();
+                const remaining = DAILY_LIMIT - count;
+                const noticeEl = document.getElementById('create-limit-notice');
+                if (allowed) {
+                    noticeEl.style.color = '#6c757d';
+                    noticeEl.style.background = '#f8f9fa';
+                    noticeEl.innerHTML = `📋 오늘 생성 가능 횟수: <b>${remaining}/${DAILY_LIMIT}</b>회 남음`;
+                } else {
+                    noticeEl.style.color = '#dc3545';
+                    noticeEl.style.background = '#fff5f5';
+                    noticeEl.innerHTML = `⛔ 오늘 모임 생성 횟수(${DAILY_LIMIT}개)를 모두 사용했습니다. 내일 다시 시도해 주세요.`;
+                }
+            }
             document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
             document.getElementById(screenId).classList.add('active');
             window.scrollTo(0,0);
@@ -548,7 +625,10 @@
                 if(data.meetingTime) infoHtml += `⏰ <b>시간:</b> ${data.meetingTime}<br>`;
                 if(data.meetingPlace) {
                     const isUrl = data.meetingPlace.startsWith('http');
-                    infoHtml += `📍 <b>장소:</b> ${isUrl ? `<a href="${data.meetingPlace}" target="_blank">지도 보기</a>` : data.meetingPlace}`;
+                    // URL이면 "지도 보기" 링크 표시, 텍스트면 그대로 표시
+                    infoHtml += `📍 <b>장소:</b> ${isUrl
+                        ? `<a href="${data.meetingPlace}" target="_blank" style="color:#4A90E2;">🔗 지도 보기</a>`
+                        : data.meetingPlace}`;
                 }
                 el.innerHTML = infoHtml; el.style.display = "block";
             } else { el.style.display = "none"; }
@@ -659,7 +739,37 @@
             document.getElementById(cid).innerHTML = generateCalendarHTML(data.startDate, data.endDate, data.excludeHolidays, 'result', aggregateData, data.confirmedDate, data.manualExcludedDates || []);
         };
 
+        // ── 하루 3개 생성 제한 (localStorage 기반) ──
+        const DAILY_LIMIT = 3;
+        const LIMIT_KEY   = 'meetingday_create_log';
+
+        function getCreateLog() {
+            try {
+                return JSON.parse(localStorage.getItem(LIMIT_KEY) || '[]');
+            } catch { return []; }
+        }
+
+        function checkDailyLimit() {
+            const today = new Date().toISOString().split('T')[0];
+            const log   = getCreateLog().filter(ts => ts.startsWith(today));
+            return { count: log.length, allowed: log.length < DAILY_LIMIT };
+        }
+
+        function recordCreate() {
+            const today = new Date().toISOString().split('T')[0];
+            const log   = getCreateLog()
+                .filter(ts => ts.startsWith(today))  // 오늘 것만 유지
+                .concat(new Date().toISOString());
+            localStorage.setItem(LIMIT_KEY, JSON.stringify(log));
+        }
+
         window.createGroup = async () => {
+            // ── 일일 생성 횟수 확인 ──
+            const { count, allowed } = checkDailyLimit();
+            if (!allowed) {
+                alert(`하루에 최대 ${DAILY_LIMIT}개의 모임만 생성할 수 있습니다.\n오늘 이미 ${count}개를 생성하셨습니다.\n내일 다시 시도해 주세요.`);
+                return;
+            }
             const gName = document.getElementById('host-group-name').value.trim();
             const pwd = document.getElementById('host-password').value;
             const s = document.getElementById('host-start-date').value;
@@ -682,7 +792,54 @@
                 manualExcludedDates: manualExcludedDates,
                 confirmedDate: null, createdAt: new Date().toISOString() 
             });
-            alert("생성 완료!\n\n※ 그룹은 생성 후 20일이 지나면 삭제 대상으로 분류됩니다."); showScreen('screen-home');
+            recordCreate(); // 생성 기록 저장
+
+            // 공유 화면으로 이동
+            const meetingTime  = document.getElementById('host-meeting-time').value.trim();
+            const meetingPlace = document.getElementById('host-meeting-place').value.trim();
+            showShareScreen(gName, s, e, meetingTime, meetingPlace);
+        };
+
+        const SITE_URL = "https://meeting-day.vercel.app/";
+
+        function buildShareMessage(gName, startDate, endDate, meetingTime, meetingPlace) {
+            let msg = `📅 이날 만나요\n`;
+            msg += `━━━━━━━━━━━━━━\n`;
+            msg += `안녕하세요! 모임 일정을 조율하려고 합니다.\n아래 링크에서 참여 가능한 날짜를 선택해 주세요 😊\n\n`;
+            msg += `🏷️ 그룹명: ${gName}\n`;
+            msg += `📆 일정 범위: ${startDate} ~ ${endDate}\n`;
+            if (meetingTime)  msg += `⏰ 예정 시간: ${meetingTime}\n`;
+            if (meetingPlace) msg += `📍 장소: ${meetingPlace}\n`;
+            msg += `\n🔗 참여 링크: ${SITE_URL}\n`;
+            msg += `━━━━━━━━━━━━━━\n`;
+            msg += `※ 사이트 접속 후 "모임 참여자" 선택\n   → 그룹명 "${gName}" 입력 후 이름을 적어주세요.`;
+            return msg;
+        }
+
+        function showShareScreen(gName, startDate, endDate, meetingTime, meetingPlace) {
+            document.getElementById('share-group-name').innerText = gName;
+            document.getElementById('share-message-text').value =
+                buildShareMessage(gName, startDate, endDate, meetingTime, meetingPlace);
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+            document.getElementById('screen-share').classList.add('active');
+            window.scrollTo(0, 0);
+        }
+
+        window.copyShareMessage = () => {
+            const text = document.getElementById('share-message-text').value;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('btn-copy');
+                const orig = btn.innerText;
+                btn.innerText = '✅ 복사됐습니다!';
+                btn.style.background = '#20c997';
+                setTimeout(() => { btn.innerText = orig; btn.style.background = ''; }, 2000);
+            }).catch(() => {
+                // clipboard API 미지원 환경 대비 fallback
+                const ta = document.getElementById('share-message-text');
+                ta.select();
+                document.execCommand('copy');
+                alert("메시지가 복사되었습니다!");
+            });
         };
 
         window.loginHost = async () => {
@@ -701,8 +858,9 @@
             const s = document.getElementById('host-start-date').value;
             const e = document.getElementById('host-end-date').value;
             if(!s || !e) return alert("날짜를 선택해 주세요.");
-            // [수정 2] 날짜 유효성 검사: 시작 날짜가 종료 날짜보다 늦은 경우 차단
             if(s > e) return alert("시작 날짜가 종료 날짜보다 늦을 수 없습니다.");
+            // 시작날짜 선택 시 종료날짜 최솟값 연동
+            document.getElementById('host-end-date').min = s;
             document.getElementById('preview-guide').style.display = 'block';
             document.getElementById('calendar-preview-container').innerHTML = generateCalendarHTML(s, e, document.getElementById('host-exclude-holidays').checked, 'preview', null, null, manualExcludedDates);
             document.getElementById('btn-create-group').style.display = 'block';
@@ -727,11 +885,62 @@
             document.getElementById('detail-modal').style.display = 'flex';
         };
 
-        window.confirmDate = async (d) => {
-            if(confirm(`${d}로 확정하시겠습니까?\n\n※ 모임일 확정 후 7일이 지나면 이 그룹은 삭제 대상으로 분류됩니다.`)) {
-                await updateDoc(doc(db, "groups", currentGroup), { confirmedDate: d });
-                loadResults('results-container');
+        window.confirmDate = async (confirmedDay) => {
+            if(confirm(`${confirmedDay}로 확정하시겠습니까?\n\n※ 모임일 확정 후 7일이 지나면 이 그룹은 삭제 대상으로 분류됩니다.`)) {
+                await updateDoc(doc(db, "groups", currentGroup), { confirmedDate: confirmedDay });
+                // 확정 후 그룹 정보 불러와서 확정 메시지 화면으로 이동
+                const groupSnap = await getDoc(doc(db, "groups", currentGroup));
+                const data = groupSnap.data();
+                showConfirmShareScreen(currentGroup, confirmedDay, data);
             }
+        };
+
+        function showConfirmShareScreen(gName, confirmedDay, data) {
+            document.getElementById('confirm-share-group-name').innerText = gName;
+            document.getElementById('confirm-share-date').innerText = confirmedDay;
+            document.getElementById('confirm-share-message-text').value =
+                buildConfirmMessage(gName, confirmedDay, data);
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+            document.getElementById('screen-confirm-share').classList.add('active');
+            window.scrollTo(0, 0);
+        }
+
+        function buildConfirmMessage(gName, confirmedDay, data) {
+            // 요일 계산
+            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+            const [y, m, d] = confirmedDay.split('-').map(Number);
+            const dayOfWeek = dayNames[new Date(y, m - 1, d).getDay()];
+            const holiday = HOLIDAYS_2026[confirmedDay] ? ` (${HOLIDAYS_2026[confirmedDay]})` : '';
+
+            let msg = `📅 이날 만나요 - 모임 날짜 확정 안내\n`;
+            msg += `━━━━━━━━━━━━━━\n`;
+            msg += `안녕하세요! 모임 날짜가 확정되었습니다 🎉\n\n`;
+            msg += `🏷️ 그룹명: ${gName}\n`;
+            msg += `📆 확정 날짜: ${confirmedDay} (${dayOfWeek})${holiday}\n`;
+            if (data.meetingTime)  msg += `⏰ 시간: ${data.meetingTime}\n`;
+            if (data.meetingPlace) {
+                msg += `📍 장소: ${data.meetingPlace}\n`;
+            }
+            msg += `\n🔗 상세 확인: ${SITE_URL}\n`;
+            msg += `━━━━━━━━━━━━━━\n`;
+            msg += `참석 부탁드립니다! 😊`;
+            return msg;
+        }
+
+        window.copyConfirmMessage = () => {
+            const text = document.getElementById('confirm-share-message-text').value;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('btn-confirm-copy');
+                const orig = btn.innerText;
+                btn.innerText = '✅ 복사됐습니다!';
+                btn.style.background = '#20c997';
+                setTimeout(() => { btn.innerText = orig; btn.style.background = ''; }, 2000);
+            }).catch(() => {
+                const ta = document.getElementById('confirm-share-message-text');
+                ta.select();
+                document.execCommand('copy');
+                alert("메시지가 복사되었습니다!");
+            });
         };
 
         window.cancelConfirm = async () => {
