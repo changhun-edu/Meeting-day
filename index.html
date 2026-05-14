@@ -227,7 +227,7 @@
                    box-sizing:border-box; resize:none; font-family:inherit; margin-bottom:10px;"></textarea>
 
         <button onclick="copyConfirmMessage()" id="btn-confirm-copy" class="success">📋 확정 메시지 복사하기</button>
-        <button onclick="showScreen('screen-host-manage')" class="secondary" style="margin-top:4px;">관리 화면으로 돌아가기</button>
+        <button onclick="goBackToManage()" class="secondary" style="margin-top:4px;">관리 화면으로 돌아가기</button>
     </div>
 
     <div id="screen-host-login" class="screen">
@@ -450,7 +450,7 @@
                                 📅 기간: ${d.startDate || '-'} ~ ${d.endDate || '-'}<br>
                                 ${d.meetingTime  ? `⏰ 시간: ${d.meetingTime}<br>`  : ''}
                                 ${d.meetingPlace ? `📍 장소: ${d.meetingPlace}<br>` : ''}
-                                ${d.confirmedDate ? `<span style="color:#28a745;font-weight:bold;">✅ 확정일: ${d.confirmedDate}</span><br>` : ''}
+                                ${d.confirmedDate ? `<span style="color:#28a745;font-weight:bold;">✅ 모임 확정일: ${d.confirmedDate}</span><br>` : ''}
                                 🕒 생성: ${d.createdAt ? new Date(d.createdAt).toLocaleString('ko-KR') : '-'}
                             </div>
                             ${reasonHtml}
@@ -542,6 +542,30 @@
             "2026-09-24": "추석연휴", "2026-09-25": "추석", "2026-09-26": "추석연휴", "2026-09-28": "대체휴일",
             "2026-10-03": "개천절", "2026-10-05": "대체휴일", "2026-10-09": "한글날", "2026-12-25": "성탄절"
         };
+
+        // ── 하루 3개 생성 제한 (localStorage 기반) ──
+        const DAILY_LIMIT = 3;
+        const LIMIT_KEY   = 'meetingday_create_log';
+
+        function getCreateLog() {
+            try {
+                return JSON.parse(localStorage.getItem(LIMIT_KEY) || '[]');
+            } catch { return []; }
+        }
+
+        function checkDailyLimit() {
+            const today = new Date().toISOString().split('T')[0];
+            const log   = getCreateLog().filter(ts => ts.startsWith(today));
+            return { count: log.length, allowed: log.length < DAILY_LIMIT };
+        }
+
+        function recordCreate() {
+            const today = new Date().toISOString().split('T')[0];
+            const log   = getCreateLog()
+                .filter(ts => ts.startsWith(today))
+                .concat(new Date().toISOString());
+            localStorage.setItem(LIMIT_KEY, JSON.stringify(log));
+        }
 
         window.showScreen = (screenId) => {
             if(screenId === 'screen-home') {
@@ -712,7 +736,8 @@
                         const hasData = agg && agg[ds];
                         
                         let clickAttr = "";
-                        if(mode === 'result' && hasData) clickAttr = `onclick="openModal('${ds}')" class="cal-cell clickable ${isC?'confirmed-day':''}"`;
+                        if(mode === 'result' && (hasData || isC)) clickAttr = `onclick="openModal('${ds}')" class="cal-cell clickable ${isC?'confirmed-day':''}"`;
+                        else if(mode === 'result') clickAttr = `class="cal-cell ${isC?'confirmed-day':''}"`;
                         else if(mode === 'preview') clickAttr = `onclick="toggleManualExclude('${ds}')" class="cal-cell clickable"`;
                         else if(mode === 'vote') clickAttr = `class="cal-cell vote-cell" onclick="openVoteSheet('${ds}')"`;
                         else clickAttr = `class="cal-cell ${isC?'confirmed-day':''}"`;
@@ -723,7 +748,7 @@
 
                         html += `<div ${clickAttr}><span class="${dCls}">${d}</span>`;
                         if(isHoliday) html += `<div style="font-size:8px; ${isC?'color:white':'color:red'}; margin-bottom:2px;">${HOLIDAYS_2026[ds]}</div>`;
-                        if(isC) html += `<div class="badge-confirmed-large">👑 확정</div>`;
+                        if(isC) html += `<div class="badge-confirmed-large">👑 모임 확정</div>`;
                         
                         if(hasData) {
                             if(agg[ds].pos.length > 0) html += `<div class="stat-pos">O ${agg[ds].pos.length}</div>`;
@@ -736,7 +761,7 @@
                         if(isHostMode && mode === 'result') {
                             html += isC
                                 ? `<button onclick="event.stopPropagation(); cancelConfirm()" class="small" style="background:white; color:#2C3E50; border:1px solid #2C3E50; margin-top:5px;">취소</button>`
-                                : `<button onclick="event.stopPropagation(); confirmDate('${ds}')" class="small success" style="margin-top:5px;">확정</button>`;
+                                : `<button onclick="event.stopPropagation(); confirmDate('${ds}')" class="small success" style="margin-top:5px;">모임 확정</button>`;
                         }
                         
                         if(mode === 'vote') {
@@ -902,30 +927,6 @@
             document.getElementById(cid).innerHTML = generateCalendarHTML(data.startDate, data.endDate, data.excludeHolidays, 'result', aggregateData, data.confirmedDate, data.manualExcludedDates || []);
         };
 
-        // ── 하루 3개 생성 제한 (localStorage 기반) ──
-        const DAILY_LIMIT = 3;
-        const LIMIT_KEY   = 'meetingday_create_log';
-
-        function getCreateLog() {
-            try {
-                return JSON.parse(localStorage.getItem(LIMIT_KEY) || '[]');
-            } catch { return []; }
-        }
-
-        function checkDailyLimit() {
-            const today = new Date().toISOString().split('T')[0];
-            const log   = getCreateLog().filter(ts => ts.startsWith(today));
-            return { count: log.length, allowed: log.length < DAILY_LIMIT };
-        }
-
-        function recordCreate() {
-            const today = new Date().toISOString().split('T')[0];
-            const log   = getCreateLog()
-                .filter(ts => ts.startsWith(today))  // 오늘 것만 유지
-                .concat(new Date().toISOString());
-            localStorage.setItem(LIMIT_KEY, JSON.stringify(log));
-        }
-
         window.createGroup = async () => {
             // ── 일일 생성 횟수 확인 ──
             const { count, allowed } = checkDailyLimit();
@@ -1048,8 +1049,15 @@
             document.getElementById('detail-modal').style.display = 'flex';
         };
 
+        window.goBackToManage = async () => {
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+            document.getElementById('screen-host-manage').classList.add('active');
+            window.scrollTo(0, 0);
+            await loadResults('results-container');
+        };
+
         window.confirmDate = async (confirmedDay) => {
-            if(confirm(`${confirmedDay}로 확정하시겠습니까?\n\n※ 모임일 확정 후 7일이 지나면 이 그룹은 삭제 대상으로 분류됩니다.`)) {
+            if(confirm(`${confirmedDay}로 모임을 확정하시겠습니까?\n\n※ 모임일 확정 후 7일이 지나면 이 그룹은 삭제 대상으로 분류됩니다.`)) {
                 await updateDoc(doc(db, "groups", currentGroup), { confirmedDate: confirmedDay });
                 // 확정 후 그룹 정보 불러와서 확정 메시지 화면으로 이동
                 const groupSnap = await getDoc(doc(db, "groups", currentGroup));
@@ -1107,9 +1115,9 @@
         };
 
         window.cancelConfirm = async () => {
-            if(confirm("확정을 취소하시겠습니까?")) {
+            if(confirm("모임 확정을 취소하시겠습니까?")) {
                 await updateDoc(doc(db, "groups", currentGroup), { confirmedDate: null });
-                loadResults('results-container');
+                await loadResults('results-container');
             }
         };
     </script>
