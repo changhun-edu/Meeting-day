@@ -78,6 +78,71 @@
         .watermark { position: fixed; bottom: 10px; right: 15px; font-size: 11px; color: #e0e0e0; user-select: none; cursor: pointer; }
 
         .info-box { background: #f1f8ff; border-radius: 10px; padding: 15px; margin-bottom: 20px; border: 1px solid #d0e7ff; }
+
+        /* ── 바텀시트 (모바일 투표용) ── */
+        .bottom-sheet-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 2000;
+        }
+        .bottom-sheet-overlay.open { display: block; }
+        .bottom-sheet {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: white; border-radius: 20px 20px 0 0;
+            padding: 20px 20px 36px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+            z-index: 2001; max-height: 70vh; overflow-y: auto;
+        }
+        .bottom-sheet.open { transform: translateY(0); }
+        .bottom-sheet-handle {
+            width: 40px; height: 4px; background: #dee2e6;
+            border-radius: 2px; margin: 0 auto 16px;
+        }
+        .bs-date-label {
+            font-size: 18px; font-weight: bold; color: #2C3E50;
+            text-align: center; margin-bottom: 16px;
+        }
+        .bs-vote-row {
+            display: flex; gap: 12px; justify-content: center; margin-bottom: 16px;
+        }
+        .bs-vote-btn {
+            flex: 1; max-width: 140px; height: 56px; font-size: 20px; font-weight: bold;
+            border: 2px solid #ddd; border-radius: 12px; background: #f8f9fa;
+            cursor: pointer; transition: all 0.15s; color: #555;
+        }
+        .bs-vote-btn.selected-pos { background: #4A90E2; border-color: #4A90E2; color: white; }
+        .bs-vote-btn.selected-imp { background: #dc3545; border-color: #dc3545; color: white; }
+        .bs-memo-input {
+            width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
+            font-size: 14px; box-sizing: border-box; margin-bottom: 14px;
+            font-family: inherit;
+        }
+        .bs-save-btn {
+            width: 100%; padding: 14px; background: #4A90E2; color: white;
+            border: none; border-radius: 10px; font-size: 16px; font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 모바일에서 vote 셀은 탭 유도 스타일로 */
+        @media (max-width: 600px) {
+            .cal-cell { min-height: 52px !important; padding: 4px 2px; }
+            .cal-cell.vote-cell { cursor: pointer; }
+            .cal-cell.vote-cell:active { background: #e8f4ff; }
+            .cal-cell .vote-toggle,
+            .cal-cell input[name^="memo_"] { display: none; }
+            .mobile-vote-indicator {
+                font-size: 11px; font-weight: bold; margin-top: 2px;
+                padding: 2px 4px; border-radius: 4px; text-align: center;
+            }
+            .mvi-pos { background: #e8f4ff; color: #4A90E2; }
+            .mvi-imp { background: #fff0f0; color: #dc3545; }
+            .mvi-none { background: #f1f3f5; color: #aaa; font-size: 10px; }
+        }
+        @media (min-width: 601px) {
+            .mobile-vote-indicator { display: none; }
+            .bottom-sheet-overlay { display: none !important; }
+        }
     </style>
 </head>
 <body>
@@ -205,6 +270,20 @@
         <div id="result-best-dates" style="background:#eef6ff; padding:15px; border-radius:10px; margin-bottom:20px;"></div>
         <div id="participant-results-container"></div>
         <button onclick="showScreen('screen-home')">처음으로</button>
+    </div>
+
+    <!-- 모바일 투표 바텀시트 -->
+    <div id="vote-bottom-sheet-overlay" class="bottom-sheet-overlay" onclick="closeVoteSheet()"></div>
+    <div id="vote-bottom-sheet" class="bottom-sheet">
+        <div class="bottom-sheet-handle"></div>
+        <div id="bs-date-label" class="bs-date-label"></div>
+        <div id="bs-current-status" style="text-align:center; font-size:13px; color:#999; margin-bottom:12px;"></div>
+        <div class="bs-vote-row">
+            <button id="bs-btn-pos" class="bs-vote-btn" onclick="bsSelectVote('가능')">⭕ 가능</button>
+            <button id="bs-btn-imp" class="bs-vote-btn" onclick="bsSelectVote('불가')">❌ 불가</button>
+        </div>
+        <input type="text" id="bs-memo-input" class="bs-memo-input" placeholder="메모 (선택사항)">
+        <button class="bs-save-btn" onclick="bsSave()">저장</button>
     </div>
 
     <div id="detail-modal" class="modal-overlay" onclick="closeModal()">
@@ -508,6 +587,86 @@
 
         window.closeModal = () => document.getElementById('detail-modal').style.display = 'none';
 
+        // ── 모바일 투표 바텀시트 ──
+        let bsCurrentDate = null;
+
+        window.openVoteSheet = (ds) => {
+            // PC면 무시 (CSS로 처리되지만 JS도 방어)
+            if (window.innerWidth > 600) return;
+            bsCurrentDate = ds;
+
+            const dayNames = ['일','월','화','수','목','금','토'];
+            const [y, m, d] = ds.split('-').map(Number);
+            const dow = dayNames[new Date(y, m-1, d).getDay()];
+            const holiday = HOLIDAYS_2026[ds] ? ` (${HOLIDAYS_2026[ds]})` : '';
+            document.getElementById('bs-date-label').textContent = `${ds} (${dow})${holiday}`;
+
+            // 기존 선택값 반영
+            const statusEl = document.querySelector(`input[name="status_${ds}"]:checked`);
+            const memoEl   = document.querySelector(`input[name="memo_${ds}"]`);
+            const curStatus = statusEl ? statusEl.value : '가능';
+            document.getElementById('bs-memo-input').value = memoEl ? memoEl.value : '';
+            bsApplyButtonStyle(curStatus);
+
+            // 현재 참여 현황 표시
+            const agg = aggregateData[ds];
+            const statusEl2 = document.getElementById('bs-current-status');
+            if (agg) {
+                statusEl2.innerHTML = `현재 가능 <b style="color:#4A90E2">${agg.pos.length}명</b> · 불가 <b style="color:#dc3545">${agg.imp.length}명</b>`;
+            } else {
+                statusEl2.textContent = '';
+            }
+
+            document.getElementById('vote-bottom-sheet-overlay').classList.add('open');
+            setTimeout(() => document.getElementById('vote-bottom-sheet').classList.add('open'), 10);
+        };
+
+        function bsApplyButtonStyle(status) {
+            const btnPos = document.getElementById('bs-btn-pos');
+            const btnImp = document.getElementById('bs-btn-imp');
+            btnPos.className = 'bs-vote-btn' + (status === '가능' ? ' selected-pos' : '');
+            btnImp.className = 'bs-vote-btn' + (status === '불가' ? ' selected-imp' : '');
+        }
+
+        window.bsSelectVote = (status) => { bsApplyButtonStyle(status); };
+
+        window.bsSave = () => {
+            if (!bsCurrentDate) return;
+            const ds = bsCurrentDate;
+
+            // 선택된 버튼으로 상태 판단
+            const isPosSelected = document.getElementById('bs-btn-pos').classList.contains('selected-pos');
+            const status = isPosSelected ? '가능' : '불가';
+            const memo   = document.getElementById('bs-memo-input').value.trim();
+
+            // 숨겨진 라디오 버튼·메모 인풋에 값 반영
+            const radioEl = document.querySelector(`input[name="status_${ds}"][value="${status}"]`);
+            if (radioEl) radioEl.checked = true;
+            const memoEl  = document.querySelector(`input[name="memo_${ds}"]`);
+            if (memoEl)  memoEl.value = memo;
+
+            // 달력 셀 인디케이터 업데이트
+            const indicator = document.getElementById(`mvi-${ds}`);
+            if (indicator) {
+                if (status === '가능') {
+                    indicator.className = 'mobile-vote-indicator mvi-pos';
+                    indicator.textContent = '⭕ 가능';
+                } else {
+                    indicator.className = 'mobile-vote-indicator mvi-imp';
+                    indicator.textContent = '❌ 불가';
+                }
+                if (memo) indicator.textContent += ' 📝';
+            }
+
+            closeVoteSheet();
+        };
+
+        window.closeVoteSheet = () => {
+            document.getElementById('vote-bottom-sheet').classList.remove('open');
+            document.getElementById('vote-bottom-sheet-overlay').classList.remove('open');
+            bsCurrentDate = null;
+        };
+
         window.toggleManualExclude = (ds) => {
             if (manualExcludedDates.includes(ds)) {
                 manualExcludedDates = manualExcludedDates.filter(d => d !== ds);
@@ -555,6 +714,7 @@
                         let clickAttr = "";
                         if(mode === 'result' && hasData) clickAttr = `onclick="openModal('${ds}')" class="cal-cell clickable ${isC?'confirmed-day':''}"`;
                         else if(mode === 'preview') clickAttr = `onclick="toggleManualExclude('${ds}')" class="cal-cell clickable"`;
+                        else if(mode === 'vote') clickAttr = `class="cal-cell vote-cell" onclick="openVoteSheet('${ds}')"`;
                         else clickAttr = `class="cal-cell ${isC?'confirmed-day':''}"`;
                         
                         let dCls = "date-num";
@@ -580,7 +740,10 @@
                         }
                         
                         if(mode === 'vote') {
+                            // PC: 인라인 O/X + 메모 (기존 방식)
+                            // 모바일: 셀 탭 시 바텀시트 오픈 (CSS로 인라인 요소 숨김)
                             html += `
+                                <div class="mobile-vote-indicator mvi-none" id="mvi-${ds}">탭하여 선택</div>
                                 <div class="vote-toggle">
                                     <label>
                                         <input type="radio" name="status_${ds}" value="가능" checked style="display:none;">
